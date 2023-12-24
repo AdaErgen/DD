@@ -7,6 +7,12 @@
 #include <chrono>
 #include <algorithm>
 #include <queue>
+#include <cstdlib> // For system-specific functions
+
+#ifdef _WIN32
+#include <ShlObj.h> // For SHGetFolderPathA on Windows
+#pragma comment(lib, "Shell32.lib")
+#endif
 
 // Node structure for each element in the hash table
 struct HashNode {
@@ -101,6 +107,11 @@ std::string extractFilename(const std::string& logLine) {
 // Processes a log file, updating both a custom hash table and an unordered_map with visit counts.
 void processLogFile(const std::string& filePath, HashTable& hashTable, std::unordered_map<std::string, int>& umap) {
     std::ifstream logFile(filePath); // Opens the log file.
+    if (!logFile.is_open()) {
+        std::cerr << "Error: Unable to open file " << filePath << std::endl;
+        return;
+    }
+
     std::string line;
     // Reads each line of the log file.
     while (getline(logFile, line)) {
@@ -136,14 +147,48 @@ std::vector<std::pair<std::string, int>> getTop10FromUnorderedMap(const std::uno
     return topPages; // Returns the sorted top pages.
 }
 
-// Main function
+// Function to get the desktop path in a platform-independent way
+std::string getDesktopPath() {
+#ifdef _WIN32
+    // Windows
+    char desktopPath[MAX_PATH];
+    if (SHGetFolderPathA(nullptr, CSIDL_DESKTOPDIRECTORY, nullptr, 0, desktopPath) == S_OK) {
+        return std::string(desktopPath) + "\\";
+    }
+#else
+    // Assume Unix-like systems
+    const char* desktopPath = getenv("HOME");
+    if (desktopPath != nullptr) {
+        return std::string(desktopPath) + "/Desktop/";
+    }
+#endif
+    // Return an empty string if the desktop path cannot be determined
+    return "";
+}
+
 int main() {
-    HashTable customHashTable(10000);  // Custom hash table
-    std::unordered_map<std::string, int> fileVisits;  // std::unordered_map
+    HashTable customHashTable(10000);
+    std::unordered_map<std::string, int> fileVisits;
+
+    // Get desktop path
+    std::string desktopPath = getDesktopPath();
+
+    if (desktopPath.empty()) {
+        std::cerr << "Error: Could not determine desktop path." << std::endl;
+        return 1;
+    }
 
     // Constructing the full file path based on your information
-    std::string desktopPath = "C:\\Users\\ertug\\Desktop\\";
     std::string accessLogPath = desktopPath + "access_log";
+
+    // Prompt user for access_log file or use default if it exists
+    std::cout << "Enter the full path of the access_log file or press Enter to use the default ('access_log' on desktop): ";
+    std::string userInput;
+    std::getline(std::cin, userInput);
+
+    if (!userInput.empty()) {
+        accessLogPath = userInput;
+    }
 
     // Start timing for custom hash table
     auto startCustom = std::chrono::high_resolution_clock::now();
